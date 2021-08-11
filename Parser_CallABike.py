@@ -8,6 +8,7 @@ from json.decoder import JSONDecodeError
 import pprint
 import math
 
+#TODO: start at last parsing end point
 # %%
 def main():
 
