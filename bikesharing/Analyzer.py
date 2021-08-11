@@ -126,8 +126,6 @@ def main():
     # insert analysis into database
     ride_analysis_list = BikeRides.allAnalyzedRidesToList()
     insertAnalysis(ride_analysis_list, connection, cursor)
-    # close the MySQL connection
-    connection.close()
 
 def getAllRides(cursor, parameters):
     # if provider was given: add string with natural join and provider-clause in WHERE, else add only WHERE
@@ -142,6 +140,8 @@ def insertAnalysis(ride_analysis_list, connection, cursor):
     cursor.executemany("INSERT INTO ride_analysis VALUES (%s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE bike_ride_id=bike_ride_id", ride_analysis_list)
     connection.commit()
     print('Inserting ride analysis done!')
+    # close the MySQL connection
+    connection.close()
 
 if __name__ == "__main__":
     main()
