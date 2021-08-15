@@ -1,5 +1,3 @@
-# %%
-
 from mysql.connector import connect, Error
 from datetime import datetime
 import requests
@@ -9,7 +7,6 @@ import pprint
 import math
 
 #TODO: start at last parsing end point
-# %%
 def main():
 
     # create MySQL connection and cursor
