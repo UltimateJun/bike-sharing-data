@@ -110,7 +110,13 @@ class DatabaseManager:
         # instantiate object to collect stations
         stations = Stations()
         # instantiate station object for every result, set attributes
-        for station in self.cursor:
+        for stationResult in self.cursor:
+            station = Station()
+            station.station_id = stationResult.station_id
+            station.name = stationResult.name
+            station.lon = stationResult.lon
+            station.lat = stationResult.lat
+            station.provider = stationResult.provider
             stations.add(station)
 
         # get all bikes from database
@@ -221,7 +227,7 @@ class Station:
     station_id: str
     name: str
     lon: float
-    lan: float
+    lat: float
     provider: str
 
 class InputGetter:

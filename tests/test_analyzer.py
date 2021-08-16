@@ -103,6 +103,7 @@ class TestAnalyzerClass(TestCase):
         bikeRide.until = datetime(2021,7,1,12,0)
         bikeRide.provider = "callabike"
 
+        # imitate ride count dictionary (5 simultaneous rides at time of pickup)
         rideCounts = {"callabike": {"2021-07-01 10:00:00": 5}}
         rideAnalyzer = Analyzer.RideAnalyzer(bikeRide)
         rideAnalyzer.analyzeRide(parameters, rideCounts)

@@ -1,13 +1,9 @@
-# %%
-
 from mysql.connector import connect, Error
-from getpass import getpass
 from datetime import datetime
 import os, os.path, datetime, json
 from json.decoder import JSONDecodeError
 import pprint
 
-# %%
 def main():
 
     # create MySQL connection and cursor
@@ -40,7 +36,6 @@ def getStations(cursor):
     nextbike_stations_set = {str(station[0]) for station in cursor.fetchall()}
     return nextbike_stations_set
 
-# %%
 def getLastStatus(cursor):
     # create dictionary with status of all bikes
     nextbike_bike_status_dict = {}
@@ -58,11 +53,6 @@ def getLastStatus(cursor):
         # write status (coordinates, station and since time) to status dictionary
         nextbike_bike_status_dict[bike_id] = [lat, lng, station_id, since]
     return nextbike_bike_status_dict
-
-# %%
-# get execution time:
-# import time
-# start_time = time.time()
 
 def parseFiles(nextbike_bike_status_dict, nextbike_stations_set, parse_month, start_day, end_day):
     

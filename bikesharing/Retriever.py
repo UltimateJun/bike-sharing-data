@@ -108,12 +108,14 @@ class CallabikeRetriever(Retriever):
     def getAllJSON(self):
         # save all remaining files
         for j in range(1, self.file_number):
+            # set offset to corresponding number
             self.offset = "&offset=" + str(j*100)
+            # get url and headers of the query
             url, headers = self.getURL()
-            # get file with suffix j
+            # get file with suffix j in filename
             self.saveFile(j, url, headers)
     def getURL(self):
-        # set parameters: 10km radius around mid-Berlin, limit file to 100 entries, offset
+        # set parameters: 10km radius around mid-Berlin, limit file to 100 entries
         lat = "&lat=52.518611"
         lon = "&lon=13.408333"
         radius = "&radius=10000"
@@ -127,11 +129,11 @@ class CallabikeRetriever(Retriever):
         }
         return url, headers
     def saveFile(self, j, url, headers):
-        # use urlRetriever to open URL and get response
+        # generate file name based on number of iteration
         fileName = 'callabike-'+str(j)+'.json'
+        # use urlRetriever to open URL and get response
+        # retrieve URL and save response to new file
         self.response = self.urlRetriever.retrieveURL(fileName, url, headers)
-        # save response to new file
-        # urlRetriever.storeFile(path)
 
 class NextbikeRetriever(Retriever):
     def __init__(self, urlRetriever: URLRetriever):
@@ -144,7 +146,6 @@ class NextbikeRetriever(Retriever):
     def saveFile(self, url):
         fileName = 'nextbike.json'
         self.urlRetriever.retrieveURL(fileName, url)
-        # urlRetriever.storeFile(path)
 
 class FileWriter(ABC):
     def __init__(self,  storagePath: StoragePath):

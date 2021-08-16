@@ -1,8 +1,8 @@
 from bikesharing import Retriever
 from datetime import date, datetime
 import os, pytest
-# import json
-# from json.decoder import JSONDecodeError
+import json
+from json.decoder import JSONDecodeError
 
 class TestRetrieverClass:
     # test if generated directory path is correct
@@ -60,19 +60,23 @@ class TestRetrieverClass:
         # if OSError arises: do not except as it will let the test fail
         os.remove(testFilePath)
 
-    # # test if nextbike file retrieval works
-    # def testNextbike(self, tmp_path):
-    #     testPath = str(tmp_path) + "/"
-    #     storagePath = Retriever.StoragePath(testPath)
-    #     storagePath.createDir()
-    #     Retriever.NextbikeRetriever(storagePath)
+    # test if nextbike file retrieval works
+    def testNextbike(self, tmp_path):
+        testPath = str(tmp_path) + "/"
+        storagePath = Retriever.StoragePath(testPath)
+        storagePath.createDir(storagePath.getPathForCurrentTime())
+        
+        successWriter = Retriever.JSONWriter(storagePath)
+        errorWriter = Retriever.StringWriter(storagePath)
+        urlRetriever = Retriever.URLRetriever(successWriter, errorWriter)
+        Retriever.NextbikeRetriever(urlRetriever)
 
-    #     nextbikePath = tmp_path / "nextbike.json"
-    #     with open(nextbikePath) as file:
-    #         try:
-    #             assert json.load(file)
-    #         except JSONDecodeError:
-    #             # if exception occurs, test will fail
-    #             pytest.fail("Not a JSON file!")
+        path = storagePath.getPathForCurrentTime() + "nextbike.json"
+        with open(path) as file:
+            try:
+                assert json.load(file)
+            except JSONDecodeError:
+                # if exception occurs, test will fail
+                pytest.fail("Not a JSON file!")
 
     # test with callabike: not possible, as limit of 30 requests / minute would be at risk!

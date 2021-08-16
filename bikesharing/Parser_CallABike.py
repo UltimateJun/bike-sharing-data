@@ -47,8 +47,6 @@ def getLastStatus(connection, cursor):
         callabike_bike_status_dict[bike_last_status[0]] = [coordinates, station_id, since]
     return callabike_bike_status_dict
 
-# %%
-
 def parseFiles(callabike_bike_status_dict, parse_month, start_day, end_day):
     
     # list for bikes that do not exist yet (not a set as list is required for SQL insertion)
@@ -246,8 +244,6 @@ def handleLastFileMissingException(callabike_bike_status_dict, callabike_excepti
     # callabike_exception_dict[timestamp_mysql] = "LastFileMissing"
 
 
-
-# %%
 def insertIntoDatabase(connection, cursor, callabike_new_bikes_list, callabike_bike_status_dict, callabike_bike_rides_list, callabike_exception_dict):
     
     # set up pretty printer with indentation
