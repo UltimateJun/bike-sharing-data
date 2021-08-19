@@ -47,8 +47,8 @@ class TestAnalyzerClass(TestCase):
     def testGetRides(self): 
         parameters = Analyzer.Parameters
         # set parameters to one day
-        parameters.start_date = "2021-07-01"
-        parameters.end_date = "2021-07-01"
+        parameters.start_date = "2021-06-05"
+        parameters.end_date = "2021-06-05"
 
         # mysql connector throws negligible DeprecationWarning: suppress that warning
         warnings.filterwarnings("ignore", category=DeprecationWarning) 
@@ -62,13 +62,13 @@ class TestAnalyzerClass(TestCase):
         endDateOfFirstRide = rides_list[0].until.date()
         
         # make sure that start and end of first ride are within given day
-        assert startDateOfFirstRide == date(2021, 7, 1)
-        assert endDateOfFirstRide == date(2021, 7, 1)
+        assert startDateOfFirstRide == date(2021, 6, 5)
+        assert endDateOfFirstRide == date(2021, 6, 5)
     def testGetRideCount(self):
         parameters = Analyzer.Parameters
         # set parameters to one day
-        parameters.start_date = "2021-07-01"
-        parameters.end_date = "2021-07-01"
+        parameters.start_date = "2021-06-05"
+        parameters.end_date = "2021-06-05"
 
         # mysql connector throws negligible DeprecationWarning: suppress that warning
         warnings.filterwarnings("ignore", category=DeprecationWarning) 
@@ -81,14 +81,14 @@ class TestAnalyzerClass(TestCase):
         assert len(rideCounts["nextbike"]) > 0
 
         # get first key in each array of both providers
-        # get date of that key (e.g. from "2021-07-01 00:10:00")
+        # get date of that key (e.g. from "2021-05-05 00:10:00")
         firstKeyInNextbike = next(iter(rideCounts["nextbike"]))
         firstKeyInCallabike = next(iter(rideCounts["callabike"]))
         dateFromKeyInNextbike = datetime.strptime(firstKeyInNextbike, "%Y-%m-%d %H:%M:%S").date()
         dateFromKeyInCallabike = datetime.strptime(firstKeyInCallabike, "%Y-%m-%d %H:%M:%S").date()
         # check that date from that key corresponds to given date
-        assert dateFromKeyInNextbike == date(2021,7,1)
-        assert dateFromKeyInCallabike == date(2021,7,1)
+        assert dateFromKeyInNextbike == date(2021, 6, 5)
+        assert dateFromKeyInCallabike == date(2021, 6, 5)
     def testAnalyzer(self):
         # get default parameters
         parameters = Analyzer.Parameters
@@ -99,12 +99,12 @@ class TestAnalyzerClass(TestCase):
         bikeRide.distance = 100
         bikeRide.start_station_id = "teststation"
         bikeRide.end_station_id = "teststation"
-        bikeRide.since = datetime(2021,7,1,10,0)
-        bikeRide.until = datetime(2021,7,1,12,0)
+        bikeRide.since = datetime(2021,6,5,10,0)
+        bikeRide.until = datetime(2021,6,5,12,0)
         bikeRide.provider = "callabike"
 
         # imitate ride count dictionary (5 simultaneous rides at time of pickup)
-        rideCounts = {"callabike": {"2021-07-01 10:00:00": 5}}
+        rideCounts = {"callabike": {"2021-06-05 10:00:00": 5}}
         rideAnalyzer = Analyzer.RideAnalyzer(bikeRide)
         rideAnalyzer.analyzeRide(parameters, rideCounts)
 

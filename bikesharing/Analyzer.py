@@ -1,4 +1,3 @@
-from bikesharing.Supplier import QueryHolder
 from mysql.connector import connect, Error
 import datetime
 from dataclasses import dataclass
@@ -30,7 +29,7 @@ class DatabaseManager:
             self.connection = connect(option_files='mysql.conf')
             self.cursor = self.connection.cursor(named_tuple=True)
         except (Error) as e:
-            # print exception to standar error if error occured while connecting to database
+            # print exception to standard error if error occured while connecting to database
             print("Database connection could not be established: " + str(e), file=sys.stderr)
     def getAllRides(self, parameters):
         # if provider was given: add string with natural join and provider-clause in WHERE, else add only WHERE

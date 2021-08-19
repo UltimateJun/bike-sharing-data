@@ -1,6 +1,7 @@
 from mysql.connector import connect, Error
-from datetime import datetime
+from datetime import datetime, timedelta
 import os, os.path, datetime, json
+import requests
 from json.decoder import JSONDecodeError
 import pprint  
 import math
@@ -9,40 +10,80 @@ from dataclasses import dataclass
 import sys
 
 def main():
+    # set path in parameters
+    parameters = Parameters("json/")
+
     # instantiate database manangers (SQL connection)
     callabikeDataManager = CallabikeDataManager()
+    # get dates of last status (= last parsing)
+    callabikeLastStatusDate = callabikeDataManager.getLastStatusDate()
+    # set start dates to the day after last parsing
+    callabikeDataManager.setStartDate(callabikeLastStatusDate)
+    # get end dates from terminal input
+    callabikeEndDay = InputGetter().getInputFromTerminal(callabikeLastStatusDate, "Call A Bike")
+    callabikeDataManager.setEndDate(callabikeEndDay)
+    
     nextbikeDataManager = NextbikeDataManager()
-
-    # get parameters from terminal input
-    parameters = Parameters()
-    InputGetter().getInputFromTerminal(parameters)
+    nextbikeLastStatusDate = nextbikeDataManager.getLastStatusDate()
+    nextbikeDataManager.setStartDate(nextbikeLastStatusDate)
+    nextbikeEndDay = InputGetter().getInputFromTerminal(nextbikeLastStatusDate, "Nextbike")
+    nextbikeDataManager.setEndDate(nextbikeEndDay)
 
     # instantiate process managers (handle entire for each API)
     callabikeManager = CallabikeProcessManager(parameters, callabikeDataManager)
-    callabikeManager.getAPI()
+    # process all files of a provider and insert into database
+    callabikeManager.executeProcess()
     nextbikeManager = NextbikeProcessManager(parameters, nextbikeDataManager)
-    nextbikeManager.getAPI()
+    nextbikeManager.executeProcess()
 
 class DataManager(ABC):
     def __init__(self):
-
-        # create MySQL connection and cursor
-        self.connection = connect(option_files='mysql.conf')
-        self.connection.autocommit = True
-        self.cursor = self.connection.cursor(named_tuple=True)
+        try:
+            # create MySQL connection and cursor
+            self.connection = connect(option_files='mysql.conf')
+            self.connection.autocommit = True
+            self.cursor = self.connection.cursor(named_tuple=True)
+        except (Error) as e:
+            # print exception to standard error if error occured while connecting to database
+            print("Database connection could not be established: " + str(e), file=sys.stderr)
         
         # set up pretty printer with indentation
         self.pp = pprint.PrettyPrinter(indent=4)
 
         self.setProvider()
+        self.createAllRidesInstance()
         self.createDataClasses()
     @abstractmethod
     def setProvider(self):
+        # set provider of data manager in subclass
         pass
     @abstractmethod
-    def createDataClasses(self):
+    def createAllRidesInstance(self):
+        # create instance in sub-class to contain all ride instances
         pass
-
+    def createDataClasses(self):
+        # create data structures (and aggregators of data classes instances) as attributes
+        self.allStatus = AllStatus()
+        self.newStations = NewStations()
+        self.stationsIDSet = self.getStationIDs()
+        self.exceptions = APIExceptions()
+        self.newBikes = []
+    def getLastStatusDate(self):
+        # get date of the last status from provider
+        self.cursor.execute("SELECT DATE(MAX(since)) AS date FROM bike_last_status NATURAL JOIN bike WHERE provider = '" + self.provider + "'")
+        # set date to result (None if no entry found)
+        lastStatusDate = self.cursor.fetchone().date
+        # if no entry found: set last status to June 3rd 2021 (one day before data collection began at June 4th)
+        lastStatusDate = datetime.date(2021, 6, 3) if not lastStatusDate else lastStatusDate
+        return lastStatusDate
+    def setStartDate(self, lastStatusDate):
+        # start date of parsing: one day after date of last status
+        startDate = lastStatusDate + datetime.timedelta(days=1)
+        self.parseYear = startDate.year
+        self.parseMonth = startDate.month
+        self.startDay = startDate.day
+    def setEndDate(self, endDay):
+        self.endDay = endDay
     def getLastStatus(self):
         # get last status of all bikes from provider
         self.cursor.execute("SELECT bike_id, ST_Y(coordinates) AS lat, ST_X(coordinates) AS lon, station_id, since FROM bike_last_status NATURAL JOIN bike WHERE provider='" + self.provider + "'")
@@ -60,14 +101,16 @@ class DataManager(ABC):
             self.allStatus.add(bikeStatus)
         # return AllStatus instance containing references to all status instances
         return self.allStatus
-    def getStations(self):
+    def getStationIDs(self):
         # get IDs of all existing stations and save in new set
         self.cursor.execute("SELECT station_id FROM station WHERE provider='" + self.provider + "'")
         # set of all station IDs (no dataclass as it is only one single attribute)
         stationsIDSet = {str(station[0]) for station in self.cursor.fetchall()}
         return stationsIDSet
     def insertStations(self):
-        pass
+        newStationsList = [(station.station_id, station.name, station.coordinates, station.provider, station.station_capacity) for station in self.newStations.stationsList]
+        self.cursor.executemany("INSERT INTO station (station_id, coordinates, name, provider, capacity) VALUES (%s,  ST_GeomFromText(%s, 4326), %s, %s, %s) ON DUPLICATE KEY UPDATE station_id=station_id", newStationsList)
+        print('Inserting new stations done at ' + datetime.datetime.now().strftime("%H:%M:%S"))
     def insertBikes(self):
         newBikesList = [(newBike, self.provider) for newBike in self.newBikes]
         print('New bikes:')
@@ -112,57 +155,39 @@ class CallabikeDataManager(DataManager):
     def setProvider(self):
         # set provider as object attribute
         self.provider = "callabike"
-    def createDataClasses(self):
+    def createAllRidesInstance(self):
         # create data structures (and aggregators of data classes instances) as attributes
-        self.allStatus = CallabikeAllStatus()
         self.allRides = CallabikeAllRides()
-        self.newBikes = []
-        # self.stations = Stations()
-        self.exceptions = APIExceptions()
-    def getStations(self):
-        pass # get stations
 
 class NextbikeDataManager(DataManager):
     def setProvider(self):
         # set provider as object attribute
         self.provider = "nextbike"
-    def createDataClasses(self):
+    def createAllRidesInstance(self):
         # create data structures (and aggregators of data classes instances) as attributes
-        self.allStatus = NextbikeAllStatus()
         self.allRides = NextbikeAllRides()
-        self.newBikes = []
-        self.newStations = NewStations()
-        self.stationsIDSet = self.getStations()
-        # self.stations = Stations()
-        self.exceptions = APIExceptions()
-    def whatever(self):
-        pass
 
-@dataclass(init=False)
+@dataclass(init=True)
 class Parameters:
-    parse_year: int
-    parse_month: int
-    start_day: int
-    end_day: int
     # set rootPath of JSON files
-    rootPath: str = "json/"
+    rootPath: str
 
 class InputGetter:
-    def getInputFromTerminal(self, parameters):
+    def getInputFromTerminal(self, lastStatusDate, provider):
+        # print last status date for provider and request end date
+        print("The previous parsing for "+provider+" ended on " + str(lastStatusDate) + ".")
+        print("The current parsing for "+provider+" will start on " + str(lastStatusDate + datetime.timedelta(days=1))+".")
+        print("Please enter end day of parsing for "+provider+": ")
         try:
-            # set dates for start and end of parsing
-            print('Please enter year of parsing: ')
-            parameters.parse_year = int(input())
-            print('Please enter month of parsing: ')
-            parameters.parse_month = int(input())
-            print('Please enter start day of parsing: ')
-            parameters.start_day = int(input())
-            print('Please enter end day of parsing: ')
-            parameters.end_day = int(input())
-        # if invalid value is entered, print error message and restart input
+            endDay = int(input())
+            # check if entered day is part of a valid date
+            lastStatusDate.replace(day = endDay)
         except ValueError:
-            print("Please enter a valid value! Try again:")
-            self.getInputFromTerminal(parameters)
+            # if invalid value is entered, print error message and restart input
+            print("Please enter a valid day! Try again:")
+            return self.getInputFromTerminal(lastStatusDate, provider)
+        # return input end day
+        return endDay
 
 class ProcessManager(ABC):
     def __init__(self, parameters: Parameters, dataManager: DataManager):
@@ -170,30 +195,33 @@ class ProcessManager(ABC):
         self.parameters = parameters
         self.dataManager = dataManager
     @abstractmethod
-    def getAPI(self):
+    def executeProcess(self):
         pass
-
-class CallabikeProcessManager(ProcessManager):
-    def getAPI(self):
-        lastAllStatus = self.dataManager.getLastStatus()
-        allFilesParser = CallabikeAllFilesParser(self.dataManager)
-        allFilesParser.parseAllFiles(self.parameters, lastAllStatus)
+    def insertIntoDatabase(self):
         self.dataManager.insertStations()
         self.dataManager.insertBikes()
         self.dataManager.insertBikeRides()
         self.dataManager.insertLastStatus()
         self.dataManager.insertExceptions()
 
+class CallabikeProcessManager(ProcessManager):
+    def executeProcess(self):
+        lastAllStatus = self.dataManager.getLastStatus()
+
+        callabikeStationsParser = CallabikeStationsParser(self.dataManager)
+        callabikeStationsParser.getNewStations(self.parameters)
+        callabikeStationsParser.parseNewStations(self.parameters)
+
+        allFilesParser = CallabikeAllFilesParser(self.dataManager)
+        allFilesParser.parseAllFiles(self.parameters, lastAllStatus)
+        self.insertIntoDatabase()
+
 class NextbikeProcessManager(ProcessManager):
-    def getAPI(self):
+    def executeProcess(self):
         lastAllStatus = self.dataManager.getLastStatus()
         allFilesParser = NextbikeAllFilesParser(self.dataManager)
         allFilesParser.parseAllFiles(self.parameters, lastAllStatus)
-        self.dataManager.insertStations()
-        self.dataManager.insertBikes()
-        self.dataManager.insertBikeRides()
-        self.dataManager.insertLastStatus()
-        self.dataManager.insertExceptions()
+        self.insertIntoDatabase()
 
 @dataclass(init=False)
 class Status():
@@ -203,33 +231,30 @@ class Status():
     station_id: str
     since: datetime
 
-class AllStatus(ABC):
+class AllStatus:
     def __init__(self):
         self.statusDict = {}
     def add(self, status):
         self.statusDict[status.bike_id] = status
-    @abstractmethod
-    def lastBikeStatusToList(self):
-        pass
-
-class CallabikeAllStatus(AllStatus):
-    def lastBikeStatusToList(self):
-        lastBikeStatusList = []
-
-class NextbikeAllStatus(AllStatus):
-    def lastBikeStatusToList(self):
-        lastBikeStatusList = []
 
 class AllFilesParser(ABC):
     @abstractmethod
     def __init__(self, dataManager: DataManager):
+        # set associated data manager in sub-class
         pass
-
+    @abstractmethod
+    def parseFilesOfAMinute(self, dirPath, lastAllStatus, datetime_current):
+        pass
     def parseAllFiles(self, parameters, lastAllStatus):
+        # get start and end date from data manager
+        startDay = self.dataManager.startDay
+        parseMonth = self.dataManager.parseMonth
+        parseYear = self.dataManager.parseYear
+        endDay = self.dataManager.endDay
         # go through all days from start day to end day
-        for day in range(parameters.start_day, parameters.end_day+1):
+        for day in range(startDay, endDay+1):
             # get date of parse by joining year, month (from parameters) and day (from loop)
-            dateOfParse = f'{parameters.parse_year:04d}' + '-' + f'{parameters.parse_month:02d}' + '-' + f'{day:02d}'
+            dateOfParse = f'{parseYear:04d}' + '-' + f'{parseMonth:02d}' + '-' + f'{day:02d}'
             # informative terminal output: start of parsing of a day
             print(dateOfParse + ' started at ' + datetime.datetime.now().strftime("%H:%M:%S"))
             # for all minutes of that date
@@ -247,19 +272,7 @@ class AllFilesParser(ABC):
                         try:
                             # parse the files of the given minute
                             self.parseFilesOfAMinute(dirPath, lastAllStatus, datetime_current)
-                        # catch JSON errors and print them with file path
-                        except JSONDecodeError as e:
-                            # if not a JSON file: read ERROR code from file
-                            try:
-                                with open(dirPath) as errorJSON:
-                                    # if ERROR code is present in file: set as errorCode
-                                    if errorJSON.read.startwith("ERROR"):
-                                        errorCode = errorJSON.read()
-                            except IOError as error:
-                                print("File system could not be read! " + str(error), file=sys.stderr)
-                            # JSONDecodeError if no errorcode was found in file
-                            errorCode = "JSONDecodeError" if not errorCode else errorCode
-                            self.exceptionHandler.handleAPIException(self.dataManager, lastAllStatus, datetime_current, errorCode)
+                        # if error occured while reading file: remember exception for database insert
                         except ValueError as e:
                             self.exceptionHandler.handleAPIException(self.dataManager, lastAllStatus, datetime_current, "ValueError")
                         except KeyError as e:
@@ -270,9 +283,19 @@ class AllFilesParser(ABC):
                             self.exceptionHandler.handleAPIException(self.dataManager, lastAllStatus, datetime_current, "IndexError")
                         except Error as e:
                             self.exceptionHandler.handleAPIException(self.dataManager, lastAllStatus, datetime_current, "Error")
-    @abstractmethod
-    def parseFilesOfAMinute(self, dirPath, lastAllStatus, datetime_current):
-        pass
+    def handleJSONDecodeError(self, path, lastAllStatus, datetime_current):
+        # default error: JSONDecodeError
+        errorCode = "JSONDecodeError"
+        # if not a JSON file: read ERROR code from file
+        try:
+            with open(path) as errorJSON:
+                # if ERROR code is present in file: overwrite errorCode
+                if errorJSON.read().startwith("ERROR"):
+                    errorCode = errorJSON.read()
+        except IOError as error:
+            print("File system could not be read! " + str(error), file=sys.stderr)
+        # handle exception with found error code
+        self.exceptionHandler.handleAPIException(self.dataManager, lastAllStatus, datetime_current, errorCode)
 
 class CallabikeAllFilesParser(AllFilesParser):
     def __init__(self, dataManager: DataManager):
@@ -283,9 +306,13 @@ class CallabikeAllFilesParser(AllFilesParser):
         firstJSONPath = dirPath+'/callabike-0.json'
         if os.path.exists(firstJSONPath):
 
-            # get cut-off positions and numbers of bikes from first file
-            # cut-off positions are updated every minute this way (in case it suddenly changes)
-            bikeNumber = self.fileParser.parseFirstFile(firstJSONPath)
+            try:
+                # get cut-off positions and numbers of bikes from first file
+                # cut-off positions are updated every minute this way (in case it suddenly changes)
+                bikeNumber = self.fileParser.parseFirstFile(firstJSONPath)
+            except JSONDecodeError as e:
+                # if not a JSON file: try to read error code in file, remember exception for database insert
+                self.handleJSONDecodeError()
 
             # calculate expected number of files (round up number of bikes divided by 100)
             # e.g. 16 files expected if there are 1550 bikes
@@ -296,7 +323,11 @@ class CallabikeAllFilesParser(AllFilesParser):
                 jsonPath = dirPath+'/callabike-'+str(callabikeJSONNumber)+'.json'
                 if os.path.exists(jsonPath):
                     # parse bike rides and new status from given file
-                    lastAllStatus = self.fileParser.parseFile(jsonPath, lastAllStatus, datetime_current)
+                    try:
+                        lastAllStatus = self.fileParser.parseFile(jsonPath, lastAllStatus, datetime_current)
+                    except JSONDecodeError as e:
+                        # if not a JSON file: try to read error code in file, remember exception for database insert
+                        self.handleJSONDecodeError()
                 
                 # if the last file should exist given the number of bikes
                 # e.g. callabike-15 is missing even though number of bikes is 1550
@@ -321,7 +352,11 @@ class NextbikeAllFilesParser(AllFilesParser):
         jsonPath = dirPath+'/nextbike.json'
         if os.path.exists(jsonPath):
             # parse bike rides and new status from given file
-            lastAllStatus = self.fileParser.parseFile(jsonPath, lastAllStatus, datetime_current)
+            try:
+                lastAllStatus = self.fileParser.parseFile(jsonPath, lastAllStatus, datetime_current)
+            except JSONDecodeError as e:
+                # if not a JSON file: try to read error code in file, remember exception for database insert
+                self.handleJSONDecodeError()
         # if nextbike.json does not exist in directory -> API exception!
         else:
             self.exceptionHandler.handleAPIException(self.dataManager, lastAllStatus, datetime_current, "FileMissing")
@@ -334,7 +369,6 @@ class FileParser(ABC):
         pass
 
 class CallabikeFileParser(FileParser):
-
     # define attributes for cutoff-positions in href for bike and station ID
     left_cut_bike: int
     right_cut_bike: int
@@ -411,15 +445,16 @@ class CallabikeFileParser(FileParser):
                 bikeLastStatusTime = lastAllStatus.statusDict[bike_id].since
                 if (bikeLastStatusTime != datetime_last_minute and bikeLastStatusTime != datetime_current):
                     # create new BikeRide instance and set end of ride parameters
-                    # current coordinates / station / datetime will be end coordinates / station / datetime of ride
+                    # current coordinates / station / last datetime will be end coordinates / station / datetime of ride
                     bikeRide = BikeRide()
                     bikeRide.bike_id = bike_id
                     bikeRide.end_lat = lat
                     bikeRide.end_lon = lon
                     bikeRide.end_station = station_id
-                    bikeRide.until = datetime_current
+                    # bike ride until the minute before it became available again
+                    bikeRide.until = datetime_current - datetime.timedelta(minutes=1)
                     # current coordinates / station / datetime will be end coordinates / station / datetime of ride
-                    self.dataManager.allRides.addBikeRide(self.dataManager, bikeRide, lastAllStatus)
+                    self.dataManager.allRides.addBikeRide(bikeRide, lastAllStatus)
             # update new available status in allStatus instance (or create new status if not yet existent)
             newStatus = Status()
             newStatus.bike_id = bike_id
@@ -489,9 +524,10 @@ class NextbikeFileParser(FileParser):
                         bikeRide.end_lat = lat
                         bikeRide.end_lon = lon
                         bikeRide.end_station = station_id
-                        bikeRide.until = datetime_current
+                        # bike ride until the minute before it became available again
+                        bikeRide.until = datetime_current - datetime.timedelta(minutes=1)
                         # current coordinates / station / datetime will be end coordinates / station / datetime of ride
-                        self.dataManager.allRides.addBikeRide(self.dataManager, bikeRide, lastAllStatus)
+                        self.dataManager.allRides.addBikeRide(bikeRide, lastAllStatus)
                 # update new available status in allStatus instance (or create new status if not yet existent)
                 newStatus = Status()
                 newStatus.bike_id = bike_id
@@ -502,13 +538,78 @@ class NextbikeFileParser(FileParser):
                 lastAllStatus.add(newStatus)
         return lastAllStatus
 
-class CallabikeStationsParser(FileParser):
-    def parseFile(self):
-        pass
+class CallabikeStationsParser:
+    def __init__(self, dataManager: DataManager):
+        self.dataManager = dataManager
+    def getNewStations(self, parameters):
+        # get current Call-A-Bike station JSON with 10km radius around mid-Berlin
+        lat = "&lat=52.518611"
+        lon = "&lon=13.408333"
+        radius = "&radius=10000"
+        limit = "&limit=100"
+        url = "https://api.deutschebahn.com/flinkster-api-ng/v1/areas?providernetwork=2" + lat + lon + radius + limit
+        headers = {
+            'Accept': 'application/json',
+            'Authorization': 'Bearer 56b6c4f18d92c4869078102e978ec8b9',
+        }
+        resp = requests.get(url, headers=headers)
+
+        # get number of available stations, divide by 100 and round up to get number of necessary requests
+        self.requests_no = math.ceil(resp.json()['size'] / 100)
+        # directory path for station files
+        rootPath = parameters.rootPath
+        dirPath = rootPath + 'Stations'
+        # save first 100 stations
+        try:
+            with open(dirPath+'/callabike_station_0.json', 'wb') as f:
+                f.write(resp.content)
+        except IOError as error:
+            print("File system could not be accessed! " + str(error), file=sys.stderr)
+        # start counting at 1 (first one already saved) until number of necessary requests reached
+        for i in range(1, self.requests_no):
+            # scroll through stations in steps of 100 by incrementally increasing offset (starting with 100)
+            offset = "&offset=" + str(i*100)
+            # request json with given offset
+            url = "https://api.deutschebahn.com/flinkster-api-ng/v1/areas?providernetwork=2" + lat + lon + radius + offset + limit
+            resp = requests.get(url, headers=headers)
+            # save JSON with numbered filename in directory
+            with open(dirPath+'/callabike_station_'+str(i)+'.json', 'wb') as f:
+                f.write(resp.content)
+        # return number of necessary requests
+    def parseNewStations(self, parameters):
+        # directory path for station files
+        rootPath = parameters.rootPath
+        dirPath = rootPath + 'Stations'
+        # go through all gathered files
+        for j in range(0, self.requests_no):
+            try:
+                # get stations of file
+                with open(dirPath+'/callabike_station_'+str(j)+'.json') as station_json:
+                    jsonObject = json.load(station_json)
+                    station_json.close()
+                stations = jsonObject['items']
+                # for every station 
+                for station in stations:
+                    station_id =  station['uid']
+                    # if station doesn't exist in database yet
+                    if station_id not in self.dataManager.stationsIDSet:
+                        # retrieve station data and add to new station instance
+                        newStation = Station()
+                        newStation.station_id = station_id
+                        station_latitude = str(station['geometry']['centroid']['coordinates'][1])
+                        station_longitude = str(station['geometry']['centroid']['coordinates'][0])
+                        # Format for MySQL ST_GeomFromText and SRID 4326: Point(52.53153 13.38651) -> in reverse order!
+                        newStation.coordinates = 'Point(' + station_latitude + ' ' + station_longitude + ')'
+                        newStation.name = station['name']
+                        newStation.provider =  'callabike'
+                        # no station_capacity (as not provided by Call-A-Bike)
+                        self.dataManager.newStations.add(newStation)
+                        self.dataManager.stationsIDSet.add(station_id)
+            except IOError as error:
+                print("File system could not be read! " + str(error), file=sys.stderr)
 
 @dataclass(init=False)
 class BikeRide:
-    bike_ride_id: int
     bike_id: str
     start_lat: float
     start_lon: float
@@ -518,7 +619,6 @@ class BikeRide:
     end_station: str
     since: datetime
     until: datetime
-    provider: str
 
 # class to handle all bike rides (storing, and analyzing)
 class AllRides(ABC):
@@ -527,11 +627,11 @@ class AllRides(ABC):
     def add(self, bikeRide):
         self.ridesList.append(bikeRide)
     @abstractmethod
-    def addBikeRide(self, dataManager: DataManager, bikeRide: BikeRide, lastAllStatus: AllStatus):
+    def addBikeRide(self, bikeRide: BikeRide, lastAllStatus: AllStatus):
         pass
 
 class CallabikeAllRides(AllRides):
-    def addBikeRide(self, dataManager: DataManager, bikeRide: BikeRide, lastAllStatus: AllStatus):
+    def addBikeRide(self, bikeRide: BikeRide, lastAllStatus: AllStatus):
         bike_id = bikeRide.bike_id
 
         # get last saved coordinates and station from status (will be start coordinates and station)
@@ -539,8 +639,8 @@ class CallabikeAllRides(AllRides):
         bikeRide.start_lon = lastAllStatus.statusDict[bike_id].lon
         bikeRide.start_station = lastAllStatus.statusDict[bike_id].station_id
 
-        # bike gone since: one minute after the last time it was available
-        bikeRide.since = lastAllStatus.statusDict[bike_id].since + datetime.timedelta(minutes=1)
+        # bike gone since: the last time it was available
+        bikeRide.since = lastAllStatus.statusDict[bike_id].since
 
         # handle "bike taken at the moment of file retrieval" exception:
         # skip rides with identical start / end coordinates AND a duration of one minute
@@ -550,15 +650,15 @@ class CallabikeAllRides(AllRides):
             self.add(bikeRide)
 
 class NextbikeAllRides(AllRides):
-    def addBikeRide(self, dataManager: DataManager, bikeRide: BikeRide, lastAllStatus: AllStatus):
+    def addBikeRide(self, bikeRide: BikeRide, lastAllStatus: AllStatus):
         bike_id = bikeRide.bike_id
 
         # get ride details (start coordinates, start station)
         bikeRide.start_lat = lastAllStatus.statusDict[bike_id].lat
         bikeRide.start_lon = lastAllStatus.statusDict[bike_id].lon
         bikeRide.start_station = lastAllStatus.statusDict[bike_id].station_id
-        # bike gone since: one minute after the last time it was available
-        bikeRide.since = lastAllStatus.statusDict[bike_id].since + datetime.timedelta(minutes=1)
+        # bike gone since: the last time it was available
+        bikeRide.since = lastAllStatus.statusDict[bike_id].since
 
         # write ride details (+ timestamps) to list
         self.add(bikeRide)
@@ -571,14 +671,11 @@ class Station:
     provider: str
     station_capacity: str = None
 
-class Stations:
+class NewStations:
     def __init__(self):
-        self.stationsDict = []
+        self.stationsList = []
     def add(self, station):
-        self.stationsDict[station.station_id]=station
-
-class NewStations(Stations):
-    pass
+        self.stationsList.append(station)
 
 @dataclass
 class APIException:

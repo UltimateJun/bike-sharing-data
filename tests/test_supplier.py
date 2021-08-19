@@ -3,15 +3,6 @@ from abc import ABC, abstractmethod
 import json
 import warnings
 
-class NoTestSupplierClass:
-    def testAllParameters(self, tmp_path):
-        # mysql connector throws negligible DeprecationWarning: suppress that warning
-        warnings.filterwarnings("ignore", category=DeprecationWarning) 
-        for TestparameterClass in ParameterTester.__subclasses__():
-            Testparameter = TestparameterClass()
-            Testparameter.testParameter(tmp_path)
-        # turn off suppression of DeprecationWarnings again
-        warnings.filterwarnings("default", category=DeprecationWarning)
 class ParameterTester(ABC):
     def setUpSupplier(self):
         # mysql connector throws negligible DeprecationWarning: suppress that warning
@@ -21,8 +12,8 @@ class ParameterTester(ABC):
         self.parameters = Supplier.Parameters()
         
         # limit all results to a defined timeframe (test would take too long otherwise)
-        self.parameters.since_min=  "2021-07-01 10:00"
-        self.parameters.since_max= "2021-07-01 18:00"
+        self.parameters.since_min=  "2021-06-05 10:00"
+        self.parameters.since_max= "2021-06-05 18:00"
         # manually set all remaining parameters to None
         # (will be set individually by the test sub-classes)
         self.parameters.until_min= None
@@ -69,15 +60,15 @@ class ParameterTester(ABC):
 class TestSince(ParameterTester):
     def testParameter(self, tmp_path):
         super().setUpSupplier()
-        self.parameters.since_min = "2021-07-01 10:00"
-        self.parameters.since_max = "2021-07-01 18:00"
+        self.parameters.since_min = "2021-06-05 10:00"
+        self.parameters.since_max = "2021-06-05 18:00"
         path = tmp_path / "sinceTest.json"
         super().getJSON(path)
 class TestUntil(ParameterTester):
     def testParameter(self, tmp_path):
         super().setUpSupplier()
-        self.parameters.until_min = "2021-07-01 16:00"
-        self.parameters.until_max = "2021-07-01 23:59"
+        self.parameters.until_min = "2021-06-05 16:00"
+        self.parameters.until_max = "2021-06-05 23:59"
         path = tmp_path / "untilTest.json"
         super().getJSON(path)
 class TestTime(ParameterTester):
@@ -90,7 +81,7 @@ class TestTime(ParameterTester):
 class TestWeekdayWeekend(ParameterTester):
     def testParameter(self, tmp_path):
         super().setUpSupplier()
-        self.parameters.weekday_weekend = "wd"
+        self.parameters.weekday_weekend = "we"
         path = tmp_path / "weekdayWeekendTest.json"
         super().getJSON(path)
 class TestProvider(ParameterTester):
