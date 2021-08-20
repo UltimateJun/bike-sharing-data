@@ -51,8 +51,12 @@ class DatabaseManager:
         rideQuery = []
         # append query in its most basic form
         # extension for query: get error_type for occured exceptions (if parameter set accordingly)
-        exceptionExtension = ", (SELECT error_type FROM exception WHERE ((exception.time BETWEEN bike_ride.since AND bike_ride.until) AND bike.provider=exception.provider) LIMIT 1) AS error_type" if parameters.flagExceptions else ""
-        basicQuery = "SELECT DISTINCT(bike_ride.bike_ride_id), bike_id, ST_X(start_coordinates) AS start_lat, ST_Y(start_coordinates) AS start_lon, ST_X(end_coordinates) AS end_lat, ST_Y(end_coordinates) AS end_lon, start_station_id, end_station_id, distance_meters, since, until, duration_min, suspicious, bike.provider" + exceptionExtension + " FROM bike_ride LEFT JOIN ride_analysis ON bike_ride.bike_ride_id=ride_analysis.bike_ride_id NATURAL JOIN bike"
+        exceptionExtension = ", (SELECT error_type FROM exception WHERE ((exception.time BETWEEN bike_ride.since AND bike_ride.until) AND \
+            bike.provider=exception.provider) LIMIT 1) AS error_type" if parameters.flagExceptions else ""
+        basicQuery = "SELECT DISTINCT(bike_ride.bike_ride_id), bike_id, ST_X(start_coordinates) AS start_lat, ST_Y(start_coordinates) AS start_lon, \
+            ST_X(end_coordinates) AS end_lat, ST_Y(end_coordinates) AS end_lon, start_station_id, end_station_id, distance_meters, since, until, \
+                duration_min, suspicious, bike.provider" + exceptionExtension + " FROM bike_ride \
+                    LEFT JOIN ride_analysis ON bike_ride.bike_ride_id=ride_analysis.bike_ride_id NATURAL JOIN bike"
         rideQuery.append(basicQuery)
 
         # create instance of queryHolder, holding parameters and rideQuery
@@ -119,8 +123,8 @@ class DatabaseManager:
             station.provider = stationResult.provider
             stations.add(station)
 
-        # get all bikes from database
         try:
+            # get the provider of all bikes from database
             self.cursor.execute("SELECT bike_id, provider FROM bike")
         except (Error) as e:
             # print exception to standar error if error occured while connecting to database
@@ -156,7 +160,6 @@ class DatabaseManager:
 @dataclass(init=False)
 class Parameters:
     # parameters can be set directly on the object
-    # parameters object is instantiated with default values
     since_min: str # string format: YYYY-MM-DD HH:MM
     since_max: str
     until_min: str
@@ -177,24 +180,6 @@ class Parameters:
     includeNearbyStations: str
     proximityStations: str
     flagExceptions: str
-
-class BikeRides:
-    def __init__(self):
-        self.bikeRidesList = []
-    def add(self, bikeRide):
-        self.bikeRidesList.append(bikeRide)
-    def generateJSONofRides(self, path):
-        # create list of dictionaries made from bike ride objects
-        ride_list = [ride.__dict__ for ride in self.bikeRidesList]
-        # create JSON string from list
-        jsonString = json.dumps(ride_list, cls=DecimalAndDatetimeHandler)
-        try:
-            with open(path, 'w') as f:
-                # write JSON string to file
-                f.write(jsonString)
-        except IOError as error:
-            print("File system could not be read! " + str(error), file=sys.stderr)
-        print('Query successfully saved to '+str(path)+'!')
 
 @dataclass(init=False)
 class BikeRide:
@@ -217,10 +202,23 @@ class BikeRide:
     # stations_nearby: list
     # exception_occured: bool
 
-class Stations:
-    stationsList = []
-    def add(self, station):
-        self.stationsList.append(station)
+class BikeRides:
+    def __init__(self):
+        self.bikeRidesList = []
+    def add(self, bikeRide):
+        self.bikeRidesList.append(bikeRide)
+    def generateJSONofRides(self, path):
+        # create list of dictionaries made from bike ride objects
+        ride_list = [ride.__dict__ for ride in self.bikeRidesList]
+        # create JSON string from list
+        jsonString = json.dumps(ride_list, cls=DecimalAndDatetimeHandler)
+        try:
+            with open(path, 'w') as f:
+                # write JSON string to file
+                f.write(jsonString)
+        except IOError as error:
+            print("File system could not be read! " + str(error), file=sys.stderr)
+        print('Query successfully saved to '+str(path)+'!')
 
 @dataclass(init=False)
 class Station:
@@ -230,13 +228,18 @@ class Station:
     lat: float
     provider: str
 
+class Stations:
+    stationsList = []
+    def add(self, station):
+        self.stationsList.append(station)
+
 class InputGetter:
     def getInput(self, parameters, district_list):
         try:
             # request parameters from terminal input
             print('Please enter filter parameters of your query! Leave blank to skip that filter.')
             parameters.since_min = input(f"Ride beginning at YYYY-MM-DD HH:MM or later: ")
-            # check if input is in correct format -> throws exception if format is wrong
+            # if input provided: check if input is in correct format -> throws exception if format is wrong
             if parameters.since_min: datetime.datetime.strptime(parameters.since_min, "%Y-%m-%d %H:%M")
             parameters.since_max = input(f"Ride beginning at YYYY-MM-DD HH:MM or earlier: ")
             if parameters.since_max: datetime.datetime.strptime(parameters.since_max, "%Y-%m-%d %H:%M")
@@ -397,6 +400,7 @@ class DecimalAndDatetimeHandler(json.JSONEncoder):
             return str(attribute)
         if isinstance(attribute, datetime.datetime):
             return str(attribute)
+        # if it is not a decimal or datetime: use the JSONEncoder default
         return super(DecimalAndDatetimeHandler, self).default(attribute)
 
 if __name__ == "__main__":

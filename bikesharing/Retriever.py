@@ -10,15 +10,15 @@ from abc import ABC, abstractmethod
 import sys
 
 def main():
-    # create new StoragePath class, get path and create directory
-    storagePath = StoragePath()
+    # create new StoragePath class
+    storagePath = StoragePath("json/")
 
     # create Retrievers for both Call a Bike and nextbike
     successWriter = JSONWriter(storagePath)
     errorWriter = StringWriter(storagePath)
-    urlRetriever = URLRetriever(successWriter, errorWriter)
-    CallabikeRetriever(urlRetriever)
-    NextbikeRetriever(urlRetriever)
+    urlToFileStorer = URLToFileStorer(successWriter, errorWriter)
+    CallabikeRetriever(urlToFileStorer)
+    NextbikeRetriever(urlToFileStorer)
 
 class StoragePath:
     # store destination path for json files
@@ -45,12 +45,12 @@ class StoragePath:
             # print exception to standard error if directory could not be created
             print("Directory could not be created! " + str(error), file=sys.stderr)
 
-class URLRetriever:
+class URLToFileStorer:
     # headers is an empty list if not passed
     def __init__(self, successWriter, errorWriter):
         self.successWriter = successWriter
         self.errorWriter = errorWriter
-    def retrieveURL(self, fileName, url, headers={}):
+    def retrieveURLToFile(self, fileName, url, headers={}):
         try:
             # get requested content from URL (passing headers)
             resp = requests.get(url, headers=headers)
@@ -81,7 +81,7 @@ class URLRetriever:
 # abstract class for Retriever classes
 class Retriever(ABC):
     @abstractmethod
-    def __init__(self, urlRetriever: URLRetriever):
+    def __init__(self, urlToFileStorer: URLToFileStorer):
         pass
     @abstractmethod
     def getURL(self):
@@ -90,9 +90,21 @@ class Retriever(ABC):
     def saveFile(self):
         pass
 
+class NextbikeRetriever(Retriever):
+    def __init__(self, urlToFileStorer: URLToFileStorer):
+        self.urlToFileStorer = urlToFileStorer
+        url = self.getURL()
+        self.saveFile(url)
+    def getURL(self):
+        url = 'https://api.nextbike.net/maps/nextbike-live.json?city=362'
+        return url
+    def saveFile(self, url):
+        fileName = 'nextbike.json'
+        self.urlToFileStorer.retrieveURLToFile(fileName, url)
+        
 class CallabikeRetriever(Retriever):
-    def __init__(self, urlRetriever: URLRetriever):
-        self.urlRetriever = urlRetriever
+    def __init__(self, urlToFileStorer: URLToFileStorer):
+        self.urlToFileStorer = urlToFileStorer
         self.getFirstJSON()
         self.getAllJSON()
     def getFirstJSON(self):
@@ -131,21 +143,9 @@ class CallabikeRetriever(Retriever):
     def saveFile(self, j, url, headers):
         # generate file name based on number of iteration
         fileName = 'callabike-'+str(j)+'.json'
-        # use urlRetriever to open URL and get response
+        # use urlToFileStorer to open URL and get response
         # retrieve URL and save response to new file
-        self.response = self.urlRetriever.retrieveURL(fileName, url, headers)
-
-class NextbikeRetriever(Retriever):
-    def __init__(self, urlRetriever: URLRetriever):
-        self.urlRetriever = urlRetriever
-        url = self.getURL()
-        self.saveFile(url)
-    def getURL(self):
-        url = 'https://api.nextbike.net/maps/nextbike-live.json?city=362'
-        return url
-    def saveFile(self, url):
-        fileName = 'nextbike.json'
-        self.urlRetriever.retrieveURL(fileName, url)
+        self.response = self.urlToFileStorer.retrieveURLToFile(fileName, url, headers)
 
 class FileWriter(ABC):
     def __init__(self,  storagePath: StoragePath):
@@ -164,7 +164,7 @@ class FileWriter(ABC):
         pass
 
 class JSONWriter(FileWriter):
-    # write to file with (content: bytes)
+    # write to file (in binary mode)
     def writeFile(self, response, fileName):
         with open(self.storagePath.getPathForCurrentTime() + fileName, 'wb') as f:
             f.write(response)

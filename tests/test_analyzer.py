@@ -80,7 +80,7 @@ class TestAnalyzerClass(TestCase):
         assert len(rideCounts["callabike"]) > 0
         assert len(rideCounts["nextbike"]) > 0
 
-        # get first key in each array of both providers
+        # get first key in each dictionary of both providers
         # get date of that key (e.g. from "2021-05-05 00:10:00")
         firstKeyInNextbike = next(iter(rideCounts["nextbike"]))
         firstKeyInCallabike = next(iter(rideCounts["callabike"]))

@@ -51,8 +51,8 @@ class TestRetrieverClass:
         successWriter = Retriever.JSONWriter(storagePath)
         errorWriter = Retriever.StringWriter(storagePath)
         
-        urlRetriever = Retriever.URLRetriever(successWriter, errorWriter)
-        urlRetriever.retrieveURL((str(httpCode)+".txt"), url)
+        urlToFileStorer = Retriever.URLToFileStorer(successWriter, errorWriter)
+        urlToFileStorer.retrieveURLToFile((str(httpCode)+".txt"), url)
         testFilePath = storagePath.getPathForCurrentTime() + (str(httpCode)+".txt")
         with open(testFilePath) as file:
             assert file.read() == httpCode
@@ -68,8 +68,8 @@ class TestRetrieverClass:
         
         successWriter = Retriever.JSONWriter(storagePath)
         errorWriter = Retriever.StringWriter(storagePath)
-        urlRetriever = Retriever.URLRetriever(successWriter, errorWriter)
-        Retriever.NextbikeRetriever(urlRetriever)
+        urlToFileStorer = Retriever.URLToFileStorer(successWriter, errorWriter)
+        Retriever.NextbikeRetriever(urlToFileStorer)
 
         path = storagePath.getPathForCurrentTime() + "nextbike.json"
         with open(path) as file:

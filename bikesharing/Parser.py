@@ -1,5 +1,4 @@
 from mysql.connector import connect, Error
-from datetime import datetime, timedelta
 import os, os.path, datetime, json
 import requests
 from json.decoder import JSONDecodeError
@@ -108,13 +107,13 @@ class DataManager(ABC):
         stationsIDSet = {str(station[0]) for station in self.cursor.fetchall()}
         return stationsIDSet
     def insertStations(self):
-        newStationsList = [(station.station_id, station.name, station.coordinates, station.provider, station.station_capacity) for station in self.newStations.stationsList]
+        newStationsList = [(station.station_id, station.coordinates, station.name, station.provider, station.station_capacity) for station in self.newStations.stationsList]
         self.cursor.executemany("INSERT INTO station (station_id, coordinates, name, provider, capacity) VALUES (%s,  ST_GeomFromText(%s, 4326), %s, %s, %s) ON DUPLICATE KEY UPDATE station_id=station_id", newStationsList)
         print('Inserting new stations done at ' + datetime.datetime.now().strftime("%H:%M:%S"))
     def insertBikes(self):
         newBikesList = [(newBike, self.provider) for newBike in self.newBikes]
-        print('New bikes:')
-        self.pp.pprint(newBikesList)
+        # print('New bikes:')
+        # self.pp.pprint(newBikesList)
         self.cursor.executemany("INSERT INTO bike (bike_id, provider) VALUES (%s, %s) ON DUPLICATE KEY UPDATE bike_id=bike_id", newBikesList)
         print('Inserting bikes done at ' + datetime.datetime.now().strftime("%H:%M:%S"))
     def insertBikeRides(self):
@@ -175,13 +174,18 @@ class Parameters:
 class InputGetter:
     def getInputFromTerminal(self, lastStatusDate, provider):
         # print last status date for provider and request end date
+        parsingStartDate = lastStatusDate + datetime.timedelta(days=1)
         print("The previous parsing for "+provider+" ended on " + str(lastStatusDate) + ".")
-        print("The current parsing for "+provider+" will start on " + str(lastStatusDate + datetime.timedelta(days=1))+".")
+        print("The current parsing for "+provider+" will start on " + str(parsingStartDate)+".")
         print("Please enter end day of parsing for "+provider+": ")
         try:
             endDay = int(input())
             # check if entered day is part of a valid date
-            lastStatusDate.replace(day = endDay)
+            endDate = parsingStartDate.replace(day = endDay)
+            if endDate >= datetime.date.today():
+                # if entered day is today or later, print error message and restart input
+                print("Please enter a day in the past! Try again:")
+                return self.getInputFromTerminal(lastStatusDate, provider)
         except ValueError:
             # if invalid value is entered, print error message and restart input
             print("Please enter a valid day! Try again:")
@@ -290,8 +294,9 @@ class AllFilesParser(ABC):
         try:
             with open(path) as errorJSON:
                 # if ERROR code is present in file: overwrite errorCode
-                if errorJSON.read().startwith("ERROR"):
-                    errorCode = errorJSON.read()
+                jsonContent = errorJSON.read()
+                if jsonContent.startswith("ERROR"):
+                    errorCode = jsonContent
         except IOError as error:
             print("File system could not be read! " + str(error), file=sys.stderr)
         # handle exception with found error code
@@ -305,14 +310,14 @@ class CallabikeAllFilesParser(AllFilesParser):
     def parseFilesOfAMinute(self, dirPath, lastAllStatus, datetime_current):
         firstJSONPath = dirPath+'/callabike-0.json'
         if os.path.exists(firstJSONPath):
-
             try:
                 # get cut-off positions and numbers of bikes from first file
                 # cut-off positions are updated every minute this way (in case it suddenly changes)
                 bikeNumber = self.fileParser.parseFirstFile(firstJSONPath)
             except JSONDecodeError as e:
                 # if not a JSON file: try to read error code in file, remember exception for database insert
-                self.handleJSONDecodeError()
+                self.handleJSONDecodeError(firstJSONPath, lastAllStatus, datetime_current)
+                return
 
             # calculate expected number of files (round up number of bikes divided by 100)
             # e.g. 16 files expected if there are 1550 bikes
@@ -327,7 +332,8 @@ class CallabikeAllFilesParser(AllFilesParser):
                         lastAllStatus = self.fileParser.parseFile(jsonPath, lastAllStatus, datetime_current)
                     except JSONDecodeError as e:
                         # if not a JSON file: try to read error code in file, remember exception for database insert
-                        self.handleJSONDecodeError()
+                        print(jsonPath)
+                        self.handleJSONDecodeError(jsonPath, lastAllStatus, datetime_current)
                 
                 # if the last file should exist given the number of bikes
                 # e.g. callabike-15 is missing even though number of bikes is 1550
@@ -356,7 +362,7 @@ class NextbikeAllFilesParser(AllFilesParser):
                 lastAllStatus = self.fileParser.parseFile(jsonPath, lastAllStatus, datetime_current)
             except JSONDecodeError as e:
                 # if not a JSON file: try to read error code in file, remember exception for database insert
-                self.handleJSONDecodeError()
+                self.handleJSONDecodeError(jsonPath, lastAllStatus, datetime_current)
         # if nextbike.json does not exist in directory -> API exception!
         else:
             self.exceptionHandler.handleAPIException(self.dataManager, lastAllStatus, datetime_current, "FileMissing")

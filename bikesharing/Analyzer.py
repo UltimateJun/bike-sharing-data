@@ -19,7 +19,7 @@ def main():
     # analyze and evaluate all resulting rides
     bikeRides.analyzeAllRides(parameters, rideCounts)
     # insert analysis into database
-    databaseManager.insertAnalysis(bikeRides.rides_list)
+    databaseManager.insertAnalysis(bikeRides.ridesList)
     databaseManager.close()
 
 class DatabaseManager:
@@ -56,12 +56,12 @@ class DatabaseManager:
             # print exception if database error occured
             print("Database connection could not be established: " + str(e), file=sys.stderr)
         return bikeRides
-    def insertAnalysis(self, analyzed_rides_list):
+    def insertAnalysis(self, analyzedRidesList):
         # use list comprehension to generate list of tuples containing values to be inserted
-        ride_analysis_list = [(ride.bike_ride_id, ride.duration, ride.distance, ride.startAndEndSameStations, ride.simultaneousRidesCount, ride.suspicious) for ride in analyzed_rides_list]
-        # insert list with all analysis of rides into ride_analysis table (replace existing entries)
+        ride_analysis_list = [(ride.bike_ride_id, ride.duration, ride.distance, ride.startAndEndSameStations, ride.simultaneousRidesCount, ride.suspicious) for ride in analyzedRidesList]
+        # insert list with all analysis of rides into ride_analysis table (replacing the suspicious attribute if already exists)
         try:
-            self.cursor.executemany("REPLACE INTO ride_analysis VALUES (%s, %s, %s, %s, %s, %s)", ride_analysis_list)
+            self.cursor.executemany("INSERT INTO ride_analysis (bike_ride_id, duration_min, distance_meters, same_stations, ride_count, suspicious) VALUES (%s, %s, %s, %s, %s, %s) AS analysis ON DUPLICATE KEY UPDATE suspicious=analysis.suspicious", ride_analysis_list)
             self.connection.commit()
         except (Error) as e:
             print("Database connection could not be established: " + str(e), file=sys.stderr)
@@ -139,11 +139,12 @@ class BikeRide:
 
 # class to handle all bike rides (storing, and analyzing)
 class BikeRides:
-    rides_list = []
+    ridesList = []
     def add(self, bikeRide):
-        self.rides_list.append(bikeRide)
+        self.ridesList.append(bikeRide)
+    # iterate through all bike rides and launch analysis for each
     def analyzeAllRides(self, parameters, rideCounts):
-        for bikeRide in self.rides_list:
+        for bikeRide in self.ridesList:
             rideAnalyzer = RideAnalyzer(bikeRide)
             rideAnalyzer.analyzeRide(parameters, rideCounts)
 
