@@ -57,9 +57,9 @@ class TestAnalyzerClass(TestCase):
         warnings.filterwarnings("default", category=DeprecationWarning)
 
         # get rides list, thereof start and end dates of first ride
-        rides_list = bikeRides.rides_list
-        startDateOfFirstRide = rides_list[0].since.date()
-        endDateOfFirstRide = rides_list[0].until.date()
+        ridesList = bikeRides.ridesList
+        startDateOfFirstRide = ridesList[0].since.date()
+        endDateOfFirstRide = ridesList[0].until.date()
         
         # make sure that start and end of first ride are within given day
         assert startDateOfFirstRide == date(2021, 6, 5)
