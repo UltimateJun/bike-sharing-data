@@ -108,14 +108,14 @@ class InputGetter:
             datetime.datetime.strptime(parameters.end_date, "%Y-%m-%d")
             parameters.provider = input(f"Please enter provider (callabike / nextbike) or leave blank for both: ")
             print('Please enter thresholds for suspicious rides, leave blank for default threshold')
-            min_distance = input(f"Minimum distance in meters (default 50): ")
+            min_distance = input(f"Minimum distance in meters (default 100): ")
             # if some input entered: try to convert to int, else leave attribute of parameters object unchanged
             if min_distance: parameters.min_distance = int(min_distance)
-            max_distance = input(f"Maximum distance in meters (default 15000): ")
+            max_distance = input(f"Maximum distance in meters (default 20000): ")
             if max_distance: parameters.max_distance = int(max_distance)
             min_duration = input(f"Minimum duration in minutes (default 3): ")
             if min_duration: parameters.min_duration = int(min_duration)
-            max_duration = input(f"Maximum duration in minutes (default 1440): ")
+            max_duration = input(f"Maximum duration in minutes (default 360): ")
             if max_duration: parameters.max_duration = int(max_duration)
             flagSameStationAsSuspicious = input(f"Rides starting and ending at the same station (y to mark it as suspicious, default no): ")
             if flagSameStationAsSuspicious == "y": parameters.flagSameStationAsSuspicious = True
