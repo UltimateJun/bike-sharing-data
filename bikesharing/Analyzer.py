@@ -89,10 +89,10 @@ class Parameters:
     start_date: str = ""
     end_date: str = ""
     provider: str = None
-    min_distance: int = 50
-    max_distance: int = 15000
+    min_distance: int = 100
+    max_distance: int = 20000
     min_duration: int = 3
-    max_duration: int = 1440
+    max_duration: int = 360
     flagSameStationAsSuspicious: bool = False
     maxSimultaneousPickupCount: int = None
     
